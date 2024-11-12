@@ -1,12 +1,24 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="UTF-8" />
-    <title>Hello World!</title>
-    <link rel="stylesheet" href="index.css" />
-  </head>
-  <body>
-    <h1>💖 Hello World!</h1>
-    <p>Welcome to your Electron application.</p>
-  </body>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Electron Webcam Stream</title>
+</head>
+<body>
+  <h1>Webcam Stream</h1>
+  <video id="webcam" autoplay></video>
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      const video = document.getElementById('webcam');
+      navigator.mediaDevices.getUserMedia({ video: true })
+        .then(stream => {
+          video.srcObject = stream;
+        })
+        .catch(err => {
+          console.error('Error accessing webcam: ', err);
+        });
+    });
+  </script>
+</body>
 </html>
