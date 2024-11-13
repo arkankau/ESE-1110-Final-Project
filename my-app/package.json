@@ -9,7 +9,8 @@
     "package": "electron-forge package",
     "make": "electron-forge make",
     "publish": "electron-forge publish",
-    "lint": "echo \"No linting configured\""
+    "lint": "echo",
+    "start-server": "cd /Users/arkanfadhilkautsar/Downloads/ESE\\ 1110/ESE-1110-Final-Proejct/my-app && node server.js"
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.5.0",
@@ -20,15 +21,15 @@
     "@electron-forge/plugin-auto-unpack-natives": "^7.5.0",
     "@electron-forge/plugin-fuses": "^7.5.0",
     "@electron/fuses": "^1.8.0",
-    "electron": "33.2.0"
+    "electron": "^33.2.0"
   },
   "keywords": [],
-  "author": {
-    "name": "arkankau",
-    "email": "arkan.fadhil25@gmail.com"
-  },
+  "author": "arkankau <arkan.fadhil25@gmail.com>",
   "license": "MIT",
   "dependencies": {
-    "electron-squirrel-startup": "^1.0.1"
+    "electron-squirrel-startup": "^1.0.1",
+    "express": "^4.21.1",
+    "qrcode": "^1.5.4",
+    "sqlite3": "^5.1.7"
   }
 }

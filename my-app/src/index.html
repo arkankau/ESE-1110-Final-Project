@@ -8,6 +8,17 @@
 <body>
   <h1>Webcam Stream</h1>
   <video id="webcam" autoplay></video>
+
+  <!-- Form to add material -->
+  <h2>Add Material</h2>
+  <input type="text" id="material-name" placeholder="Material Name">
+  <input type="text" id="material-dimension" placeholder="Dimension">
+  <input type="text" id="material-type" placeholder="Material Type">
+  <button id="add-material-btn">Add Material</button>
+
+  <h2>QR Code</h2>
+  <img id="qr-code" style="max-width: 300px;" />
+
   <script>
     window.addEventListener('DOMContentLoaded', () => {
       const video = document.getElementById('webcam');
@@ -18,6 +29,24 @@
         .catch(err => {
           console.error('Error accessing webcam: ', err);
         });
+
+      // Button click event for adding material
+      const addButton = document.getElementById('add-material-btn');
+      addButton.addEventListener('click', () => {
+        const name = document.getElementById('material-name').value;
+        const dimension = document.getElementById('material-dimension').value;
+        const material = document.getElementById('material-type').value;
+
+        // Call the addMaterial function from preload.js
+        window.api.addMaterial(name, dimension, material).then(data => {
+          console.log("QR Code URL:", data.qrCode);
+          // Display the QR code image
+          const qrCodeImg = document.getElementById('qr-code');
+          qrCodeImg.src = data.qrCode;  // Set the source of the image to the QR code URL
+        }).catch(error => {
+          console.error("Error adding material:", error);
+        });
+      });
     });
   </script>
 </body>
