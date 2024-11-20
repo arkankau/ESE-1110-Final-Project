@@ -1,53 +1,197 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Electron Webcam Stream</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Code Scanner</title>
+    <link rel="stylesheet" href="index.css">
 </head>
 <body>
-  <h1>Webcam Stream</h1>
-  <video id="webcam" autoplay></video>
+    <div class="container">
+        <!-- Left Section -->
+        <div class="left-section">
+            <!-- Video Capture Section -->
+            <section id="capture-section">
+                <h2>Camera Feed</h2>
+                <video id="video" autoplay></video>
+                <div class="button-group">
+                    <button id="capture">Take Photo</button>
+                    <button id="isolate-paper">Isolate Paper</button>
+                </div>
+            </section>
 
-  <!-- Form to add material -->
-  <h2>Add Material</h2>
-  <input type="text" id="material-name" placeholder="Material Name">
-  <input type="text" id="material-dimension" placeholder="Dimension">
-  <input type="text" id="material-type" placeholder="Material Type">
-  <button id="add-material-btn">Add Material</button>
+            <!-- Photos Gallery Section -->
+            <section id="gallery-section">
+                <h2>Saved Photos</h2>
+                <ul id="photos-list"></ul>
+                <div class="controls">
+                    <button id="clear-photos" class="danger-btn">Clear All Photos</button>
+                </div>
+            </section>
 
-  <h2>QR Code</h2>
-  <img id="qr-code" style="max-width: 300px;" />
+            <!-- Detection Results Section -->
+            <section id="results-section">
+                <h2>Detection Results</h2>
+                <div id="detection-results"></div>
+            </section>
+        </div>
 
-  <script>
-    window.addEventListener('DOMContentLoaded', () => {
-      const video = document.getElementById('webcam');
-      navigator.mediaDevices.getUserMedia({ video: true })
-        .then(stream => {
-          video.srcObject = stream;
-        })
-        .catch(err => {
-          console.error('Error accessing webcam: ', err);
+        <!-- Right Section -->
+        <div class="right-section">
+            <div class="photo-container">
+                <h2>Selected Photo</h2>
+                <img id="displayed-photo" src="" alt="Selected Photo">
+            </div>
+            <div class="photo-container">
+                <h2>Cropped Photo</h2>
+                <img id="cropped-photo" src="" alt="Cropped Photo">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const photosList = document.getElementById('photos-list');
+        const detectionResults = document.getElementById('detection-results');
+        const displayedPhoto = document.getElementById('displayed-photo');
+        const croppedPhoto = document.getElementById('cropped-photo');
+        
+        let selectedPhotoFilename = null;
+
+        async function initializeCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+            } catch (error) {
+                console.error('Camera initialization failed:', error);
+            }
+        }
+
+        async function loadPhotosList() {
+    const photos = await window.electronAPI.getPhotos();
+    displayPhotos(photos);
+}
+
+        document.getElementById('capture').addEventListener('click', async () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            const dataURL = canvas.toDataURL('image/png');
+            await window.electronAPI.saveImage(dataURL);
+            loadPhotosList();
         });
 
-      // Button click event for adding material
-      const addButton = document.getElementById('add-material-btn');
-      addButton.addEventListener('click', () => {
-        const name = document.getElementById('material-name').value;
-        const dimension = document.getElementById('material-dimension').value;
-        const material = document.getElementById('material-type').value;
+        document.getElementById('isolate-paper').addEventListener('click', async () => {
+    if (!selectedPhotoFilename) {
+        alert('Please select a photo first');
+        return;
+    }
 
-        // Call the addMaterial function from preload.js
-        window.api.addMaterial(name, dimension, material).then(data => {
-          console.log("QR Code URL:", data.qrCode);
-          // Display the QR code image
-          const qrCodeImg = document.getElementById('qr-code');
-          qrCodeImg.src = data.qrCode;  // Set the source of the image to the QR code URL
-        }).catch(error => {
-          console.error("Error adding material:", error);
+    try {
+        const result = await window.electronAPI.isolatePaper(selectedPhotoFilename);
+        detectionResults.innerHTML = '';
+
+        if (result?.success) {
+            // Log for debugging
+            console.log('Cropped image filename:', result.croppedFilename);
+            
+            // Display detection results first
+            const detectionData = {
+                class: result.className,
+                confidence: result.confidence,
+                corners: result.corners
+            };
+            displayDetectionResults([detectionData]);
+            detectionResults.insertAdjacentHTML('afterbegin', '<p>Paper isolated successfully.</p>');
+
+            // Get and display cropped image
+            const croppedImageData = await window.electronAPI.getImageData(result.croppedFilename);
+            if (croppedImageData) {
+                console.log('Received cropped image data');
+                const croppedPhoto = document.getElementById('cropped-photo');
+                croppedPhoto.src = croppedImageData;
+                croppedPhoto.style.display = 'block'; // Ensure visibility
+            } else {
+                console.error('Failed to get cropped image data');
+                alert('Failed to load cropped image');
+            }
+        } else {
+            const errorMessage = result?.message || 'Failed to isolate paper.';
+            detectionResults.innerHTML = `<p>${errorMessage}</p>`;
+            if (result?.corners !== undefined) {
+                detectionResults.insertAdjacentHTML('beforeend', `<p>Corners detected: ${result.corners}</p>`);
+            }
+            document.getElementById('cropped-photo').src = '';
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('An error occurred while isolating paper');
+    }
+});
+
+        document.getElementById('clear-photos').addEventListener('click', async () => {
+            const success = await window.electronAPI.clearAllPhotos();
+            if (success) {
+                selectedPhotoFilename = null;
+                photosList.innerHTML = '';
+                detectionResults.innerHTML = '';
+                displayedPhoto.src = '';
+                croppedPhoto.src = '';
+            }
         });
-      });
-    });
-  </script>
+
+        photosList.addEventListener('click', async (e) => {
+            if (e.target.classList.contains('photo-item')) {
+                document.querySelectorAll('.photo-item')
+                    .forEach(item => item.classList.remove('selected'));
+                
+                e.target.classList.add('selected');
+                selectedPhotoFilename = e.target.dataset.filename;
+                
+                const imageData = await window.electronAPI.getImageData(selectedPhotoFilename);
+                if (imageData) {
+                    displayedPhoto.src = imageData;
+                    croppedPhoto.src = '';  // Clear cropped photo when new photo selected
+                }
+            }
+        });
+
+        function displayPhotos(photos) {
+            photosList.innerHTML = photos
+                .map(photo => `<li class="photo-item" data-filename="${photo}">${photo}</li>`)
+                .join('');
+        }
+
+        function displayDetectionResults(data) {
+    if (!data || data.length === 0) {
+        detectionResults.innerHTML = '<p>No detections found.</p>';
+        return;
+    }
+
+    detectionResults.innerHTML = data.map(item => {
+        // Handle case where corners might not be an array
+        const cornersList = Array.isArray(item.corners) 
+            ? item.corners.map((corner, index) => 
+                `<li>Corner ${index + 1}: (${corner[0]?.toFixed(2) || 0}, ${corner[1]?.toFixed(2) || 0})</li>`
+            ).join('')
+            : '<li>No corner data available</li>';
+
+        return `
+            <div class="result-item">
+                <p><strong>Class:</strong> ${item.class || 'Unknown'}</p>
+                <p><strong>Confidence:</strong> ${((item.confidence || 0) * 100).toFixed(2)}%</p>
+                <p><strong>Corners:</strong></p>
+                <ul>${cornersList}</ul>
+            </div>
+        `;
+    }).join('');
+}
+
+        window.electronAPI.onPhotosUpdated(displayPhotos);
+        
+        initializeCamera();
+        loadPhotosList();
+    </script>
 </body>
 </html>

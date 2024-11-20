@@ -1,7 +1,249 @@
+/* index.css */
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica,
     Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  height: 100vh;
+  overflow: hidden;
+  background-color: #1a1b26;
+  color: #a9b1d6;
+}
+
+#photos-list, #detection-results {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: #f5f5f5;
+  border-radius: 4px;
+  background: #24283b;
+}
+
+#photos-list li, .result-item {
+  margin: 0.5rem 0;
+}
+
+.result-item p {
+  margin: 0.3rem 0;
+}
+
+.result-item ul {
+  margin: 0;
+  padding-left: 1rem;
+}
+
+.result-item li {
+  list-style-type: disc;
+}
+
+.controls {
+  margin: 1rem 0;
+}
+
+.danger-btn {
+  background: #dc3545;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.danger-btn:hover {
+  background: #c82333;
+}
+
+.modal {
+  display: none;
+  position: fixed;
+  z-index: 1;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0,0,0,0.9);
+}
+
+.modal-content {
   margin: auto;
-  max-width: 38rem;
+  display: block;
+  width: 80%;
+  max-width: 700px;
+  position: relative;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.close {
+  color: #f1f1f1;
+  position: absolute;
+  right: 25px;
+  top: 0;
+  font-size: 35px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.container {
+  background-color: #1a1b26;
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+}
+
+#selected-image {
+  width: 100%;
+  height: auto;
+}
+
+.photo-item {
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 4px;
+}
+
+.photo-item:hover {
+  background-color: #e9ecef;
+}
+
+.photo-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+.photo-container h2 {
+  color: #a9b1d6;
+  margin-bottom: 1rem;
+}
+
+#displayed-photo,
+#cropped-photo {
+  max-width: 100%;
+  max-height: 50vh;
+  border: 2px solid #3b4261;
+  border-radius: 8px;
+}
+
+#cropped-photo:empty {
+  display: none;
+}
+
+/* Left section styling */
+.left-section {
+  flex: 1;
   padding: 2rem;
+  border-right: 4px solid #ccc;
+  overflow-y: auto;
+  max-width: 50%;
+  background-color: #1f2335;
+}
+
+/* Right section styling */
+.right-section {
+  flex: 1;
+  padding: 2rem;
+  overflow-y: auto;
+  background-color: #1f2335;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+/* Label Styling */
+.right-section h2 {
+  color: #a9b1d6;
+  margin-bottom: 1rem;
+}
+
+/* Displayed Photo Styling */
+#displayed-photo {
+  max-width: 100%;
+  max-height: 100%;
+  border: 2px solid #293838; /* Updated border color */
+  border-radius: 10px; /* Updated border-radius */
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.3); /* Added box-shadow */
+}
+
+#displayed-photo {
+  max-width: 50%;
+  max-height: 50%;
+  border: 2px solid #3b4261;
+  border-radius: 8px;
+}
+
+#video {
+  border: 2px solid #293838;
+  border-radius: 10px;
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
+  width: 100%;
+  max-width: 640px;
+  height: auto;
+  margin: 1rem 0;
+  background-color: #000;
+}
+
+/* Button Group Styling */
+.button-group {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1rem;
+  width: 100%;
+  max-width: 640px; /* Matches the video's max-width */
+  margin: 1rem auto 0; /* Centers the button group */
+}
+
+/* Capture and Isolate Button Styling */
+#capture, #isolate-paper {
+  padding: 12px 0;
+  font-size: 1.2rem;
+  background-color: #3b4261; /* Matches the project's color palette */
+  color: #a9b1d6;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+  flex: 1; /* Ensures both buttons take equal space */
+}
+
+#capture:hover, #isolate-paper:hover {
+  background-color: #4c566a;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 600px) {
+  .button-group {
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    max-width: 100%; /* Allows full width on smaller screens */
+  }
+
+  #capture, #isolate-paper {
+    width: 100%;
+    max-width: 300px;
+  }
+}
+
+.cropped-image {
+  max-width: 50%;
+  max-height: 50%;
+  border: 2px solid #3b4261;
+  border-radius: 8px;
+  margin-top: 1rem;
+}
+
+#cropped-photo {
+  max-width: 100%;
+  max-height: 50vh;
+  border: 2px solid #3b4261;
+  border-radius: 8px;
+  display: block; /* Ensure it's not hidden */
+}
+
+#cropped-photo:not([src]) {
+  display: none;
 }

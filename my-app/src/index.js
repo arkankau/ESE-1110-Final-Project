@@ -1,25 +1,11 @@
-const { app, BrowserWindow } = require('electron');
-const path = require('node:path');
-
-if (require('electron-squirrel-startup')) {
-  app.quit();
-}
-
-const createWindow = () => {
-  const mainWindow = new BrowserWindow({
-    width: 800,
-    height: 600,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-    },
-  });
-
-  mainWindow.loadFile(path.join(__dirname, 'index.html'));
-  mainWindow.webContents.openDevTools();
-};
+// src/index.js
+const { app } = require('electron');
+const { createWindow } = require('./main/window');
+const { setupHandlers } = require('./main/handlers');
 
 app.whenReady().then(() => {
   createWindow();
+  setupHandlers();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
