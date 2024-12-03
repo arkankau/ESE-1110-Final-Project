@@ -278,3 +278,33 @@ input[type="file"] {
   background-color: #2c2f3a;
   cursor: not-allowed;
 }
+
+
+/* Add to index.css */
+.camera-controls {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 1rem;
+  width: 100%;
+  max-width: 640px;
+}
+
+.camera-btn {
+  padding: 12px 24px;
+  font-size: 1.2rem;
+  background-color: #3b4261;
+  color: #a9b1d6;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.camera-btn:hover {
+  background-color: #4c566a;
+}
+
+.camera-btn:active {
+  background-color: #2e3440;
+}

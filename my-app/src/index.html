@@ -33,6 +33,11 @@
                     <input type="file" id="upload-dwg" disabled>
                     <label for="upload-dwg" id="upload-dwg-label" class="locked">Upload SVG File</label>
                     <button id="see-best-position" disabled class = "locked">See Best Position</button>
+                    <!-- Add this inside the button-group div in the capture-section -->
+<div class="camera-controls">
+    <button id="camera-up" class="camera-btn">Move Camera Up</button>
+    <button id="camera-down" class="camera-btn">Move Camera Down</button>
+</div>
                 </div>
             </section>
 
@@ -672,11 +677,51 @@
                 console.log('Please upload both the big and small matrices.');
             }
         });
-    
-        window.electronAPI.onPhotosUpdated(displayPhotos);
-    
-        initializeCamera();
-        loadPhotosList();
-    </script>
+    // Blynk configuration
+const BLYNK_URL = "https://blynk.cloud/external/api/update";
+const BLYNK_AUTH = "BxcRHWDpweXBx6q7r1NtP3EEfGgi5-H0";
+const CAMERA_PIN = "V0";
+
+// Camera control parameters
+let currentAngle = 90;
+const ANGLE_STEP = 5;
+const MIN_ANGLE = 0;
+const MAX_ANGLE = 180;
+
+// Function to update camera angle via Blynk
+async function updateCameraAngle(angle) {
+    try {
+        const response = await fetch(`${BLYNK_URL}?token=${BLYNK_AUTH}&${CAMERA_PIN}=${angle}`);
+        if (!response.ok) {
+            throw new Error('Failed to update camera position');
+        }
+        currentAngle = angle;
+        console.log(`Camera angle updated to: ${angle}°`);
+    } catch (error) {
+        console.error('Error updating camera:', error);
+        alert('Failed to move camera');
+    }
+}
+
+// Camera control event listeners
+document.getElementById('camera-up').addEventListener('click', () => {
+    const newAngle = Math.min(currentAngle + ANGLE_STEP, MAX_ANGLE);
+    if (newAngle !== currentAngle) {
+        updateCameraAngle(newAngle);
+    }
+});
+
+document.getElementById('camera-down').addEventListener('click', () => {
+    const newAngle = Math.max(currentAngle - ANGLE_STEP, MIN_ANGLE);
+    if (newAngle !== currentAngle) {
+        updateCameraAngle(newAngle);
+    }
+});
+
+// Initialize application
+window.electronAPI.onPhotosUpdated(displayPhotos);
+initializeCamera();
+loadPhotosList();
+</script>
 </body>
 </html>
