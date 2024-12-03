@@ -197,7 +197,7 @@ body {
 }
 
 /* Capture and Isolate Button Styling */
-#capture, #isolate-paper {
+#capture, #isolate-paper, #upload-png-label, #upload-dwg-label, #see-best-position, #cancel, #print, #scan-qr-code {
   padding: 12px 0;
   font-size: 1.2rem;
   background-color: #3b4261; /* Matches the project's color palette */
@@ -209,7 +209,11 @@ body {
   flex: 1; /* Ensures both buttons take equal space */
 }
 
-#capture:hover, #isolate-paper:hover {
+input[type="file"] {
+  display: none;
+}
+
+#capture:hover, #isolate-paper:hover, #upload-png-label:hover, #upload-dwg-label:hover, #see-best-position:hover, #cancel:hover, #print:hover {
   background-color: #4c566a;
 }
 
@@ -222,7 +226,7 @@ body {
     max-width: 100%; /* Allows full width on smaller screens */
   }
 
-  #capture, #isolate-paper {
+  #capture, #isolate-paper, #upload-png-label, #see-best-position, #scan-qr-code {
     width: 100%;
     max-width: 300px;
   }
@@ -246,4 +250,31 @@ body {
 
 #cropped-photo:not([src]) {
   display: none;
+}
+
+#binary-mapping-canvas {
+  width: 100%;
+  height: auto;
+  border: 2px solid black;
+  display: block;
+  margin: 1rem auto;
+}
+
+#optimal-placement-results {
+  padding: 12px;
+  font-size: 1.2rem;
+  background-color: #3b4261; /* Matches the project's color palette */
+  color: #a9b1d6;
+  border: none;
+  border-radius: 8px;
+  margin-top: 1rem;
+  width: 100%;
+  max-width: 640px; /* Matches the video's max-width */
+  margin: 1rem auto 0; /* Centers the text placeholder */
+}
+
+/* Locked Button Styling */
+.locked {
+  background-color: #2c2f3a;
+  cursor: not-allowed;
 }

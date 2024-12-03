@@ -14,9 +14,18 @@ async function saveBase64Image(dataURL) {
   const base64Data = dataURL.replace(/^data:image\/png;base64,/, '');
   const fileName = `photo-${Date.now()}.png`;
   const filePath = path.join(userDataPath, fileName);
-  await fs.writeFile(filePath, base64Data, 'base64');
-  return filePath;
+
+  try {
+    await fs.writeFile(filePath, base64Data, 'base64');
+    console.log(`Image saved at: ${filePath}`); // Debug log
+    return filePath;
+  } catch (error) {
+    console.error(`Failed to save image at ${filePath}:`, error.message);
+    throw error;
+  }
 }
+
+
 
 async function clearAllPhotos() {
   const userDataPath = app.getPath('userData');

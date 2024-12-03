@@ -1,3 +1,14 @@
+<!-- src/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Code Scanner</title>
+    <link rel="stylesheet" href="index.css">
+</head>
+<body>
+<!-- src/index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -17,6 +28,11 @@
                 <div class="button-group">
                     <button id="capture">Take Photo</button>
                     <button id="isolate-paper">Isolate Paper</button>
+                    <input type="file" id="upload-png" accept=".txt">
+                    <label for="upload-png" id="upload-png-label">Paper File (Daulet)</label>
+                    <input type="file" id="upload-dwg" disabled>
+                    <label for="upload-dwg" id="upload-dwg-label" class="locked">Upload SVG File</label>
+                    <button id="see-best-position" disabled class = "locked">See Best Position</button>
                 </div>
             </section>
 
@@ -34,6 +50,12 @@
                 <h2>Detection Results</h2>
                 <div id="detection-results"></div>
             </section>
+
+            <!-- Optimal Placement Results Section -->
+            <section id="optimal-placement-section">
+                <h2>Optimal Placement Results</h2>
+                <div id="optimal-placement-results"></div>
+            </section>
         </div>
 
         <!-- Right Section -->
@@ -46,18 +68,425 @@
                 <h2>Cropped Photo</h2>
                 <img id="cropped-photo" src="" alt="Cropped Photo">
             </div>
+            <div class="button-group">
+                <button id="scan-qr-code">Scan QR Code</button>
+            </div>
+            <div class="photo-container">
+                <h2>Preview</h2>
+                <canvas id="binary-mapping-canvas"></canvas>
+                <div class="button-group">
+                    <button id="cancel">Cancel</button>
+                    <button id="print">Print</button>
+                </div>
+            </div>
         </div>
     </div>
-
     <script>
         const video = document.getElementById('video');
         const photosList = document.getElementById('photos-list');
         const detectionResults = document.getElementById('detection-results');
         const displayedPhoto = document.getElementById('displayed-photo');
         const croppedPhoto = document.getElementById('cropped-photo');
-        
+        const convertedDwg = document.getElementById('converted-dwg');
+        const binaryMappingCanvas = document.getElementById('binary-mapping-canvas');
+        const optimalPlacementResults = document.getElementById('optimal-placement-results');
         let selectedPhotoFilename = null;
+    
+        document.getElementById('scan-qr-code').addEventListener('click', async () => {
+            if (!selectedPhotoFilename) {
+                alert('Please select a photo first');
+                return;
+            }
 
+            try {
+                const result = await window.electronAPI.scanImageForQRCode(selectedPhotoFilename);
+                if (result.new) {
+                    alert(`New QR code generated: ${result.qrCode}`);
+                } else {
+                    alert(`Existing QR code found: ${result.qrCode}`);
+                }
+            } catch (error) {
+                console.error('Error scanning QR code:', error);
+                alert('An error occurred while scanning QR code');
+            }
+        });
+
+        let bigMatrix = null;
+        let smallMatrix = null;
+    
+        // Add event listeners for the new buttons
+        document.getElementById('upload-dwg').addEventListener('change', async (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = async function(e) {
+                    const fileContent = e.target.result;
+                    if (file.type === 'image/svg+xml') {
+                        try {
+                            const pngBlob = await convertSvgToPng(fileContent);
+                            const pngUrl = URL.createObjectURL(pngBlob);
+                            const img = new Image();
+                            img.onload = () => {
+                                const canvas = document.createElement('canvas');
+                                const context = canvas.getContext('2d');
+                                const txtWidth = bigMatrix[0].length;
+                                const txtHeight = bigMatrix.length;
+
+                                // Check if the SVG fits the paper in any rotation
+                                let fits = false;
+                                const rotations = [0, 90, 180, 270];
+                                for (const angle of rotations) {
+                                    const rotatedDimensions = getRotatedDimensions(img.width, img.height, angle);
+                                    if (rotatedDimensions.width <= txtWidth && rotatedDimensions.height <= txtHeight) {
+                                        fits = true;
+                                        rotateAndDrawImage(context, img, angle, rotatedDimensions.width, rotatedDimensions.height);
+                                        break;
+                                    }
+                                }
+
+                                // Resize the SVG if it doesn't fit in any rotation
+                                if (!fits) {
+                                    const scale = Math.min(txtWidth / img.width, txtHeight / img.height);
+                                    canvas.width = img.width * scale;
+                                    canvas.height = img.height * scale;
+                                    context.drawImage(img, 0, 0, canvas.width, canvas.height);
+                                }
+
+                                const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+                                smallMatrix = convertImageDataToBinaryMapping(imageData);
+                                smallMatrix = trimEmptySpaces(smallMatrix); // Trim empty outer spaces
+                                const parts = divideIntoParts(smallMatrix); // Divide into smaller parts
+                                URL.revokeObjectURL(pngUrl);
+
+                                // Enable the see best position button
+                                document.getElementById('see-best-position').disabled = false;
+                                document.getElementById('see-best-position').classList.remove('locked');
+                            };
+                            img.src = pngUrl;
+                        } catch (error) {
+                            console.error('Error converting SVG to PNG:', error);
+                        }
+                    } else {
+                        smallMatrix = fileContent.split('\n').map(line => line.trim().split(''));
+                        smallMatrix = trimEmptySpaces(smallMatrix); // Trim empty outer spaces
+                        const parts = divideIntoParts(smallMatrix); // Divide into smaller parts
+
+                        // Enable the see best position button
+                        document.getElementById('see-best-position').disabled = false;
+                        document.getElementById('see-best-position').classList.remove('locked');
+                    }
+                };
+                reader.readAsText(file);
+            }
+        });
+
+        function getRotatedDimensions(width, height, angle) {
+            if (angle === 90 || angle === 270) {
+                return { width: height, height: width };
+            }
+            return { width, height };
+        }
+
+        function rotateAndDrawImage(context, img, angle, width, height) {
+            const canvas = context.canvas;
+            canvas.width = width;
+            canvas.height = height;
+            context.clearRect(0, 0, canvas.width, canvas.height);
+            context.save();
+            context.translate(canvas.width / 2, canvas.height / 2);
+            context.rotate((angle * Math.PI) / 180);
+            context.drawImage(img, -img.width / 2, -img.height / 2);
+            context.restore();
+        }
+
+        function convertSvgToPng(svgString) {
+            return new Promise((resolve, reject) => {
+                const svgBlob = new Blob([svgString], { type: 'image/svg+xml' });
+                const svgUrl = URL.createObjectURL(svgBlob);
+
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    context.drawImage(img, 0, 0);
+
+                    canvas.toBlob((blob) => {
+                        URL.revokeObjectURL(svgUrl);
+                        resolve(blob);
+                    }, 'image/png');
+                };
+
+                img.onerror = () => {
+                    URL.revokeObjectURL(svgUrl);
+                    reject(new Error('Failed to load SVG image'));
+                };
+
+                img.src = svgUrl;
+            });
+        }
+
+        function convertImageDataToBinaryMapping(imageData) {
+            const binaryMapping = [];
+            for (let y = 0; y < imageData.height; y++) {
+                const row = [];
+                for (let x = 0; x < imageData.width; x++) {
+                    const index = (y * imageData.width + x) * 4;
+                    const alpha = imageData.data[index + 3];
+                    row.push(alpha > 0 ? '1' : '0');
+                }
+                binaryMapping.push(row);
+            }
+            return binaryMapping;
+        }
+
+        function trimEmptySpaces(matrix) {
+            // Trim empty rows from the top
+            while (matrix.length && matrix[0].every(cell => cell === '0')) {
+                matrix.shift();
+            }
+            // Trim empty rows from the bottom
+            while (matrix.length && matrix[matrix.length - 1].every(cell => cell === '0')) {
+                matrix.pop();
+            }
+
+            // Trim empty columns from the left
+            let left = 0;
+            while (left < matrix[0].length && matrix.every(row => row[left] === '0')) {
+                left++;
+            }
+
+            // Trim empty columns from the right
+            let right = matrix[0].length - 1;
+            while (right >= 0 && matrix.every(row => row[right] === '0')) {
+                right--;
+            }
+
+            // Return the trimmed matrix
+            return matrix.map(row => row.slice(left, right + 1));
+        }
+
+        function divideIntoParts(matrix) {
+            const parts = [];
+            let currentPart = [];
+
+            for (let row of matrix) {
+                if (row.every(cell => cell === '0')) {
+                    if (currentPart.length > 0) {
+                        parts.push(currentPart);
+                        currentPart = [];
+                    }
+                } else {
+                    currentPart.push(row);
+                }
+            }
+
+            if (currentPart.length > 0) {
+                parts.push(currentPart);
+            }
+
+            return parts;
+        }
+    
+        document.getElementById('upload-png').addEventListener('change', async (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    bigMatrix = e.target.result.split('\n').map(line => line.trim().split(''));
+                    drawBinaryMapping(bigMatrix);
+
+                    // Enable the upload SVG button
+                    document.getElementById('upload-dwg').disabled = false;
+                    document.getElementById('upload-dwg-label').classList.remove('locked');
+                };
+                reader.readAsText(file);
+            }
+        });
+    
+        document.getElementById('see-best-position').addEventListener('click', () => {
+            if (bigMatrix && smallMatrix) {
+                const optimalPlacement = findOptimalPlacement(bigMatrix, smallMatrix);
+                if (optimalPlacement) {
+                    console.log('Optimal Placement:', optimalPlacement);
+                    drawOptimalPlacement(bigMatrix, smallMatrix, optimalPlacement);
+                    displayOptimalPlacementResults(optimalPlacement);
+                } else {
+                    console.log('No valid placement found.');
+                    optimalPlacementResults.innerHTML = '<p>No valid placement found.</p>';
+                }
+            } else {
+                console.log('Please upload both the big and small matrices.');
+                optimalPlacementResults.innerHTML = '<p>Please upload both the big and small matrices.</p>';
+            }
+        });
+    
+        function drawBinaryMapping(binaryMapping) {
+            const ctx = binaryMappingCanvas.getContext('2d');
+            const cellSize = 10; // Size of each cell in the grid
+            const rows = binaryMapping.length;
+            const cols = binaryMapping[0].length;
+            binaryMappingCanvas.width = cols * cellSize;
+            binaryMappingCanvas.height = rows * cellSize;
+    
+            for (let row = 0; row < rows; row++) {
+                for (let col = 0; col < cols; col++) {
+                    ctx.fillStyle = binaryMapping[row][col] === '1' ? '#FFFFFF' : '#000000';
+                    ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
+                }
+            }
+    
+            // Draw the black outline
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(0, 0, cols * cellSize, rows * cellSize);
+        }
+    
+        function drawOptimalPlacement(big, small, placement) {
+            const ctx = binaryMappingCanvas.getContext('2d');
+            const cellSize = 10; // Size of each cell in the grid
+            const rows = big.length;
+            const cols = big[0].length;
+            binaryMappingCanvas.width = cols * cellSize;
+            binaryMappingCanvas.height = rows * cellSize;
+    
+            // Draw the big matrix
+            for (let row = 0; row < rows; row++) {
+                for (let col = 0; col < cols; col++) {
+                    ctx.fillStyle = big[row][col] === '1' ? '#FFFFFF' : '#000000';
+                    ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
+                }
+            }
+    
+            // Draw the small matrix at the optimal placement
+            const { y, x, angle } = placement;
+            const rotatedSmall = rotateMatrixByAngle(small, angle);
+            for (let row = 0; row < rotatedSmall.length; row++) {
+                for (let col = 0; col < rotatedSmall[0].length; col++) {
+                    if (rotatedSmall[row][col] === '1') {
+                        ctx.fillStyle = 'rgba(0, 255, 0, 0.5)'; // Semi-transparent green
+                        ctx.fillRect((x + col) * cellSize, (y + row) * cellSize, cellSize, cellSize);
+                    }
+                }
+            }
+    
+            // Draw the black outline
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(0, 0, cols * cellSize, rows * cellSize);
+        }
+    
+        function displayOptimalPlacementResults(placement) {
+            optimalPlacementResults.innerHTML = `
+                <p><strong>Optimal Placement:</strong></p>
+                <p>Y: ${placement.y}</p>
+                <p>X: ${placement.x}</p>
+                <p>Filament Used: ${placement.filamentUsed}</p>
+                <p>Angle: ${placement.angle}°</p>
+            `;
+        }
+    
+        function rotateMatrixByAngle(matrix, angle) {
+            let rotatedMatrix = matrix;
+            for (let i = 0; i < angle / 90; i++) {
+                rotatedMatrix = rotateMatrix(rotatedMatrix);
+            }
+            return rotatedMatrix;
+        }
+    
+        // Function to rotate a 2D array (90° clockwise)
+        function rotateMatrix(matrix) {
+            const rows = matrix.length;
+            const cols = matrix[0].length;
+            const rotated = Array.from({ length: cols }, () => Array(rows).fill("0"));
+    
+            for (let y = 0; y < rows; y++) {
+                for (let x = 0; x < cols; x++) {
+                    rotated[x][rows - y - 1] = matrix[y][x];
+                }
+            }
+    
+            return rotated;
+        }
+    
+        // Function to check if the placement is valid
+        function isValidPlacement(big, small, startY, startX) {
+            const smallHeight = small.length;
+            const smallWidth = small[0].length;
+    
+            for (let y = 0; y < smallHeight; y++) {
+                for (let x = 0; x < smallWidth; x++) {
+                    const bigY = startY + y;
+                    const bigX = startX + x;
+    
+                    if (bigY >= 0 && bigY < big.length && bigX >= 0 && bigX < big[0].length) {
+                        if (small[y][x] === "1" && big[bigY][bigX] === "0") {
+                            return false;
+                        }
+                    }
+                }
+            }
+            return true;
+        }
+    
+        // Function to calculate the filament used in a placement
+        function calculateFilamentUsed(big, small, startY, startX) {
+            let filamentUsed = 0;
+    
+            for (let y = 0; y < small.length; y++) {
+                for (let x = 0; x < small[0].length; x++) {
+                    const bigY = startY + y;
+                    const bigX = startX + x;
+    
+                    if (bigY >= 0 && bigY < big.length && bigX >= 0 && bigX < big[0].length) {
+                        if (small[y][x] === "1" && big[bigY][bigX] === "1") {
+                            filamentUsed++;
+                        }
+                    }
+                }
+            }
+    
+            return filamentUsed;
+        }
+    
+        // Function to find the optimal placement
+        function findOptimalPlacement(big, small) {
+            const rotations = [
+                { matrix: small, angle: 0 },
+                { matrix: rotateMatrix(small), angle: 90 },
+                { matrix: rotateMatrix(rotateMatrix(small)), angle: 180 },
+                { matrix: rotateMatrix(rotateMatrix(rotateMatrix(small))), angle: 270 },
+            ];
+    
+            let optimalPlacement = null;
+            let leastFilamentUsed = Infinity;
+    
+            for (const { matrix: rotatedSmall, angle } of rotations) {
+                const bigHeight = big.length;
+                const bigWidth = big[0].length;
+                const smallHeight = rotatedSmall.length;
+                const smallWidth = rotatedSmall[0].length;
+    
+                for (let startY = 0; startY <= bigHeight - smallHeight; startY++) {
+                    for (let startX = 0; startX <= bigWidth - smallWidth; startX++) {
+                        if (isValidPlacement(big, rotatedSmall, startY, startX)) {
+                            const filamentUsed = calculateFilamentUsed(big, rotatedSmall, startY, startX);
+    
+                            if (filamentUsed < leastFilamentUsed) {
+                                leastFilamentUsed = filamentUsed;
+                                optimalPlacement = { y: startY, x: startX, filamentUsed, angle };
+                            }
+                        }
+                    }
+                }
+            }
+    
+            return optimalPlacement;
+        }
+    
+        // Existing event listeners and functions
         async function initializeCamera() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -66,12 +495,12 @@
                 console.error('Camera initialization failed:', error);
             }
         }
-
+    
         async function loadPhotosList() {
-    const photos = await window.electronAPI.getPhotos();
-    displayPhotos(photos);
-}
-
+            const photos = await window.electronAPI.getPhotos();
+            displayPhotos(photos);
+        }
+    
         document.getElementById('capture').addEventListener('click', async () => {
             const canvas = document.createElement('canvas');
             canvas.width = video.videoWidth;
@@ -81,55 +510,55 @@
             await window.electronAPI.saveImage(dataURL);
             loadPhotosList();
         });
-
+    
         document.getElementById('isolate-paper').addEventListener('click', async () => {
-    if (!selectedPhotoFilename) {
-        alert('Please select a photo first');
-        return;
-    }
-
-    try {
-        const result = await window.electronAPI.isolatePaper(selectedPhotoFilename);
-        detectionResults.innerHTML = '';
-
-        if (result?.success) {
-            // Log for debugging
-            console.log('Cropped image filename:', result.croppedFilename);
-            
-            // Display detection results first
-            const detectionData = {
-                class: result.className,
-                confidence: result.confidence,
-                corners: result.corners
-            };
-            displayDetectionResults([detectionData]);
-            detectionResults.insertAdjacentHTML('afterbegin', '<p>Paper isolated successfully.</p>');
-
-            // Get and display cropped image
-            const croppedImageData = await window.electronAPI.getImageData(result.croppedFilename);
-            if (croppedImageData) {
-                console.log('Received cropped image data');
-                const croppedPhoto = document.getElementById('cropped-photo');
-                croppedPhoto.src = croppedImageData;
-                croppedPhoto.style.display = 'block'; // Ensure visibility
-            } else {
-                console.error('Failed to get cropped image data');
-                alert('Failed to load cropped image');
+            if (!selectedPhotoFilename) {
+                alert('Please select a photo first');
+                return;
             }
-        } else {
-            const errorMessage = result?.message || 'Failed to isolate paper.';
-            detectionResults.innerHTML = `<p>${errorMessage}</p>`;
-            if (result?.corners !== undefined) {
-                detectionResults.insertAdjacentHTML('beforeend', `<p>Corners detected: ${result.corners}</p>`);
-            }
-            document.getElementById('cropped-photo').src = '';
-        }
-    } catch (error) {
-        console.error('Error:', error);
-        alert('An error occurred while isolating paper');
-    }
-});
 
+            try {
+                const result = await window.electronAPI.isolatePaper(selectedPhotoFilename);
+                detectionResults.innerHTML = '';
+
+                if (result?.success) {
+                    // Log for debugging
+                    console.log('Cropped image filename:', result.croppedFilename);
+                    
+                    // Display detection results first
+                    const detectionData = {
+                        class: result.className,
+                        confidence: result.confidence,
+                        corners: result.corners
+                    };
+                    displayDetectionResults([detectionData]);
+                    detectionResults.insertAdjacentHTML('afterbegin', '<p>Paper isolated successfully.</p>');
+
+                    // Get and display cropped image
+                    const croppedImageData = await window.electronAPI.getImageData(result.croppedFilename);
+                    if (croppedImageData) {
+                        console.log('Received cropped image data');
+                        const croppedPhoto = document.getElementById('cropped-photo');
+                        croppedPhoto.src = croppedImageData;
+                        croppedPhoto.style.display = 'block'; // Ensure visibility
+                    } else {
+                        console.error('Failed to get cropped image data');
+                        alert('Failed to load cropped image');
+                    }
+                } else {
+                    const errorMessage = result?.message || 'Failed to isolate paper.';
+                    detectionResults.innerHTML = `<p>${errorMessage}</p>`;
+                    if (result?.corners !== undefined) {
+                        detectionResults.insertAdjacentHTML('beforeend', `<p>Corners detected: ${result.corners}</p>`);
+                    }
+                    document.getElementById('cropped-photo').src = '';
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('An error occurred while isolating paper');
+            }
+        });
+    
         document.getElementById('clear-photos').addEventListener('click', async () => {
             const success = await window.electronAPI.clearAllPhotos();
             if (success) {
@@ -140,56 +569,112 @@
                 croppedPhoto.src = '';
             }
         });
-
+    
         photosList.addEventListener('click', async (e) => {
             if (e.target.classList.contains('photo-item')) {
-                document.querySelectorAll('.photo-item')
-                    .forEach(item => item.classList.remove('selected'));
-                
+                document.querySelectorAll('.photo-item').forEach(item => item.classList.remove('selected'));
                 e.target.classList.add('selected');
                 selectedPhotoFilename = e.target.dataset.filename;
-                
                 const imageData = await window.electronAPI.getImageData(selectedPhotoFilename);
                 if (imageData) {
                     displayedPhoto.src = imageData;
-                    croppedPhoto.src = '';  // Clear cropped photo when new photo selected
+                    croppedPhoto.src = '';
                 }
             }
         });
-
+    
         function displayPhotos(photos) {
             photosList.innerHTML = photos
                 .map(photo => `<li class="photo-item" data-filename="${photo}">${photo}</li>`)
                 .join('');
         }
-
+    
         function displayDetectionResults(data) {
-    if (!data || data.length === 0) {
-        detectionResults.innerHTML = '<p>No detections found.</p>';
-        return;
-    }
+            if (!data || data.length === 0) {
+                detectionResults.innerHTML = '<p>No detections found.</p>';
+                return;
+            }
 
-    detectionResults.innerHTML = data.map(item => {
-        // Handle case where corners might not be an array
-        const cornersList = Array.isArray(item.corners) 
-            ? item.corners.map((corner, index) => 
-                `<li>Corner ${index + 1}: (${corner[0]?.toFixed(2) || 0}, ${corner[1]?.toFixed(2) || 0})</li>`
-            ).join('')
-            : '<li>No corner data available</li>';
+            detectionResults.innerHTML = data.map(item => {
+                // Handle case where corners might not be an array
+                const cornersList = Array.isArray(item.corners) 
+                    ? item.corners.map((corner, index) => 
+                        `<li>Corner ${index + 1}: (${corner[0]?.toFixed(2) || 0}, ${corner[1]?.toFixed(2) || 0})</li>`
+                    ).join('')
+                    : '<li>No corner data available</li>';
 
-        return `
-            <div class="result-item">
-                <p><strong>Class:</strong> ${item.class || 'Unknown'}</p>
-                <p><strong>Confidence:</strong> ${((item.confidence || 0) * 100).toFixed(2)}%</p>
-                <p><strong>Corners:</strong></p>
-                <ul>${cornersList}</ul>
-            </div>
-        `;
-    }).join('');
-}
+                return `
+                    <div class="result-item">
+                        <p><strong>Class:</strong> ${item.class || 'Unknown'}</p>
+                        <p><strong>Confidence:</strong> ${((item.confidence || 0) * 100).toFixed(2)}%</p>
+                        <p><strong>Corners:</strong></p>
+                        <ul>${cornersList}</ul>
+                    </div>
+                `;
+            }).join('');
+        }
+        document.getElementById('cancel').addEventListener('click', () => {
+            // Reset the application to its initial state
+            bigMatrix = null;
+            smallMatrix = null;
+            binaryMappingCanvas.getContext('2d').clearRect(0, 0, binaryMappingCanvas.width, binaryMappingCanvas.height);
+            optimalPlacementResults.innerHTML = '';
+            console.log('Application reset to initial state.');
 
+            // Disable the upload SVG and see best position buttons
+            document.getElementById('upload-dwg').disabled = true;
+            document.getElementById('upload-dwg-label').classList.add('locked');
+            document.getElementById('see-best-position').disabled = true;
+            document.getElementById('see-best-position').classList.add('locked');
+
+            // Re-enable the upload PNG button
+            document.getElementById('upload-png').disabled = false;
+            document.getElementById('upload-png-label').classList.remove('locked');
+        });
+
+        document.getElementById('print').addEventListener('click', () => {
+            if (bigMatrix && smallMatrix) {
+                const optimalPlacement = findOptimalPlacement(bigMatrix, smallMatrix);
+                if (optimalPlacement) {
+                    const { y, x, angle } = optimalPlacement;
+                    const rotatedSmall = rotateMatrixByAngle(smallMatrix, angle);
+
+                    // Update the bigMatrix with the smallMatrix placement
+                    for (let row = 0; row < rotatedSmall.length; row++) {
+                        for (let col = 0; col < rotatedSmall[0].length; col++) {
+                            if (rotatedSmall[row][col] === '1') {
+                                bigMatrix[y + row][x + col] = '0'; // Change the green blocks to black
+                            }
+                        }
+                    }
+
+                    // Draw the updated binary mapping
+                    drawBinaryMapping(bigMatrix);
+
+                    // Create a downloadable text file
+                    const blob = new Blob([bigMatrix.map(row => row.join('')).join('\n')], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'updated_binary_mapping.txt';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+
+                    document.querySelector('h2#preview-header').textContent = 'Result';
+
+                    console.log('Binary mapping updated and downloaded.');
+                } else {
+                    console.log('No valid placement found.');
+                }
+            } else {
+                console.log('Please upload both the big and small matrices.');
+            }
+        });
+    
         window.electronAPI.onPhotosUpdated(displayPhotos);
-        
+    
         initializeCamera();
         loadPhotosList();
     </script>
