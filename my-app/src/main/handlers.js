@@ -56,22 +56,14 @@ function setupHandlers() {
     }
   });
 
-  // Isolate paper
-  ipcMain.handle('isolate-paper', async (event, imagePath, qrCode) => {
+  // Isolate paper from image
+  ipcMain.handle('isolate-paper', async (event, filename) => {
     try {
-      // Fetch the paper TXT file from the database using the QR code
-      const paperFile = await getPaperFileByQRCode(qrCode);
-
-      if (!paperFile) {
-        throw new Error('Paper file not found in the database');
-      }
-
-      // Convert the paper file content to a matrix
-      const bigMatrix = paperFile.split('\n').map(line => line.trim().split(''));
-
-      // Proceed to crop the image
+      const userDataPath = app.getPath('userData');
+      const imagePath = path.join(userDataPath, filename);
+  
       const prediction = await processImage(imagePath);
-
+  
       if (!prediction || !prediction.corners) {
         return {
           success: false,
@@ -79,9 +71,9 @@ function setupHandlers() {
           croppedFilename: null
         };
       }
-
+  
       const { corners, isolatedImagePath } = prediction;
-
+  
       if (corners.length !== 4) {
         return {
           success: false,
@@ -89,28 +81,15 @@ function setupHandlers() {
           croppedFilename: null
         };
       }
-
-      // Flatten the corners array
-      const flattenedCorners = corners.flat();
-
-      // Proceed to crop the image
-      const { outputPath: croppedImagePath } = await cropImage(imagePath, flattenedCorners);
-
-      // Debugging log to check the croppedImagePath
-      console.log('Cropped Image Path:', croppedImagePath);
-
-      if (!croppedImagePath) {
-        throw new Error('Cropped image path is undefined');
-      }
-
+  
       return {
         success: true,
         corners: 4,
-        croppedFilename: path.basename(croppedImagePath),
+        croppedFilename: path.basename(isolatedImagePath),
         className: prediction.class,
         confidence: prediction.confidence
       };
-
+  
     } catch (error) {
       console.error('Error in isolate-paper:', error);
       return {

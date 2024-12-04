@@ -101,18 +101,6 @@ async function getNextValidQRCode() {
     throw error;
   }
 }
-function getPaperFileByQRCode(qrCode) {
-  return new Promise((resolve, reject) => {
-      const query = `SELECT paper_file FROM images WHERE qr_code = ?`;
-      db.get(query, [qrCode], (err, row) => {
-          if (err) {
-              reject(err);
-          } else {
-              resolve(row ? row.paper_file : null);
-          }
-      });
-  });
-}
 
 // Get the latest image from the database
 function getLatestImageFromDatabase() {
@@ -135,6 +123,4 @@ module.exports = {
   getImageByQRCode,
   getNextValidQRCode,
   getLatestImageFromDatabase,
-  getPaperFileByQRCode,
-  db,
 };
